@@ -12,7 +12,7 @@ It accepts text files (TXT, MD), processes content with NLP and Generative AI to
 
 ## Live Demo (Streamlit Interface)
 
-![App Screenshot](image.png)
+![App Screenshot](image_v2.png)
 
 ---
 
