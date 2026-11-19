@@ -1,94 +1,120 @@
-import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import pandas as pd
 import streamlit as st
-from modules.spacy_nlp import process_text
-from modules.llm_processor import summarize_text, answer_question
+
+from modules.llm_processor import DEFAULT_MODEL, KEY_INFO_FIELDS, answer_question, extract_key_info, summarize_text
+from modules.loader import SUPPORTED_TYPES, read_document
+from modules.spacy_nlp import extract_entities, overall_sentiment, sentence_sentiment
 from modules.summarizer import extractive_summary
 from modules.visualizer import plot_entity_distribution, plot_sentiment_timeline
 
-# Page configuration
-st.set_page_config(
-    page_title="📊 AI Document Analyzer",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="AI Document Analyzer", page_icon="📄", layout="wide")
 
-# App Header
-st.title("📄 AI-Powered Document Analyzer")
-st.caption("Built with Generative AI + NLP | Developed by @Ali")
-st.markdown("---")
 
-# Upload or paste text
-st.sidebar.header("📤 Upload or Paste Document")
-uploaded_file = st.sidebar.file_uploader("Upload a text file (TXT, MD):", type=["txt", "md"])
-text_input = st.sidebar.text_area("Or paste your text below:", height=200, placeholder="Enter or paste your text here...")
+# Cached so that typing a question does not re-run (and re-pay for) the other AI calls.
+@st.cache_data(show_spinner=False)
+def ai_summary(text: str) -> str:
+    return summarize_text(text)
 
-# Read text
-text = uploaded_file.read().decode("utf-8") if uploaded_file else text_input.strip() if text_input else None
+
+@st.cache_data(show_spinner=False)
+def ai_key_info(text: str) -> dict:
+    return extract_key_info(text)
+
+
+@st.cache_data(show_spinner=False)
+def nlp_results(text: str) -> dict:
+    return {
+        "entities": extract_entities(text),
+        "timeline": sentence_sentiment(text),
+        "overall": overall_sentiment(text),
+        "extractive": extractive_summary(text),
+    }
+
+
+st.title("📄 AI Document Analyzer")
+st.caption(f"Summaries, key facts and Q&A with Claude ({DEFAULT_MODEL}) · entities and sentiment with spaCy")
+
+st.sidebar.header("Document")
+uploaded = st.sidebar.file_uploader("Upload a file", type=SUPPORTED_TYPES)
+pasted = st.sidebar.text_area("…or paste text", height=220)
+
+text = None
+if uploaded:
+    try:
+        text = read_document(uploaded.name, uploaded.getvalue())
+    except Exception as exc:
+        st.error(f"Could not read the file: {exc}")
+        st.stop()
+elif pasted.strip():
+    text = pasted.strip()
 
 if not text:
-    st.info("👈 Please upload a file or paste some text in the sidebar to get started.")
+    st.info("👈 Upload a TXT, MD, PDF or DOCX file, or paste text in the sidebar.")
     st.stop()
 
-# Basic document stats
-word_count = len(text.split())
-char_count = len(text)
-reading_time = max(1, word_count // 200)
+words = len(text.split())
+c1, c2, c3 = st.columns(3)
+c1.metric("Words", f"{words:,}")
+c2.metric("Characters", f"{len(text):,}")
+c3.metric("Reading time", f"{max(1, round(words / 200))} min")
 
-with st.expander("📄 Document Overview", expanded=True):
-    st.write(f"**Word Count:** {word_count}")
-    st.write(f"**Character Count:** {char_count}")
-    st.write(f"**Estimated Reading Time:** {reading_time} minute(s)")
+tab_summary, tab_facts, tab_qa, tab_entities, tab_sentiment = st.tabs(
+    ["📝 Summary", "🔎 Key facts", "❓ Ask", "🏷️ Entities", "📈 Sentiment"]
+)
 
-st.markdown("---")
+with tab_summary:
+    with st.spinner("Summarizing…"):
+        try:
+            st.markdown(ai_summary(text))
+        except Exception as exc:
+            st.error(f"AI summary failed: {exc}")
+    with st.expander("Extractive summary (key sentences taken directly from the text)"):
+        st.write(nlp_results(text)["extractive"])
 
-# Processing
-with st.spinner("⚙️ Analyzing document with AI..."):
-    try:
-        processed = process_text(text)
-        extractive = extractive_summary(text)
-        abstractive = summarize_text(text)
-    except Exception as e:
-        st.error(f"❌ Error during processing: {e}")
-        st.stop()
+with tab_facts:
+    with st.spinner("Extracting key facts…"):
+        try:
+            facts = ai_key_info(text)
+            rows = [{"type": k.replace("_", " ").title(), "value": v} for k in KEY_INFO_FIELDS for v in facts[k]]
+            if rows:
+                df = pd.DataFrame(rows)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.download_button("Download as CSV", df.to_csv(index=False).encode("utf-8-sig"),
+                                   "key_facts.csv", "text/csv")
+            else:
+                st.warning("No key facts found.")
+        except Exception as exc:
+            st.error(f"Extraction failed: {exc}")
 
-# Tabs for different outputs
-tabs = st.tabs(["📝 Summaries", "🏷️ Entities", "📈 Sentiment", "❓ Q&A"])
-
-# Summaries Tab
-with tabs[0]:
-    st.subheader("📝 Text Summaries")
-    st.markdown("**🔹 Extractive Summary**")
-    st.success(extractive if extractive else "No extractive summary available.")
-    st.markdown("**🔹 Abstractive Summary (AI-Generated)**")
-    st.info(abstractive if abstractive else "No abstractive summary available.")
-
-# Entities Tab
-with tabs[1]:
-    st.subheader("🏷️ Named Entity Recognition")
-    if processed.get("entities"):
-        st.plotly_chart(plot_entity_distribution(processed["entities"]), use_container_width=True)
-    else:
-        st.warning("No named entities found in the text.")
-
-# Sentiment Tab
-with tabs[2]:
-    st.subheader("📈 Sentiment Timeline")
-    if processed.get("sentiment"):
-        st.plotly_chart(plot_sentiment_timeline([processed["sentiment"]]), use_container_width=True)
-    else:
-        st.warning("No sentiment data available.")
-
-# Q&A Tab
-with tabs[3]:
-    st.subheader("❓ Ask AI About Your Document")
-    question = st.text_input("Ask a question related to the document:")
+with tab_qa:
+    question = st.text_input("Ask a question about the document")
     if question:
-        with st.spinner("🤖 Generating answer..."):
+        with st.spinner("Thinking…"):
             try:
-                answer = answer_question(text, question)
-                st.success(f"💬 Answer: {answer}" if answer else "⚠️ No answer generated.")
-            except Exception as e:
-                st.error(f"Failed to answer: {e}")
+                st.success(answer_question(text, question))
+            except Exception as exc:
+                st.error(f"Could not answer: {exc}")
+
+with tab_entities:
+    try:
+        entities = nlp_results(text)["entities"]
+        if entities:
+            st.plotly_chart(plot_entity_distribution(entities), use_container_width=True)
+            st.dataframe(pd.DataFrame(entities).value_counts().reset_index(name="mentions"),
+                         use_container_width=True, hide_index=True)
+        else:
+            st.warning("No named entities found (entity recognition works on English text).")
+    except Exception as exc:
+        st.error(str(exc))
+
+with tab_sentiment:
+    results = nlp_results(text)
+    st.metric("Overall polarity", results["overall"]["polarity"],
+              help="−1 is very negative, +1 is very positive (English text)")
+    if len(results["timeline"]) > 1:
+        st.plotly_chart(plot_sentiment_timeline(results["timeline"]), use_container_width=True)

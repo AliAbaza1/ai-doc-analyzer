@@ -1,0 +1,11 @@
+Service Agreement
+
+This agreement is made on March 3, 2026 between Nile Logistics LLC, based in Cairo, Egypt, and Brightline Software Ltd, based in London, United Kingdom.
+
+Brightline Software will build and deliver an order-tracking dashboard for Nile Logistics. The project starts on March 10, 2026 and the first working version must be delivered by April 15, 2026.
+
+The total fee is USD 4,800. Nile Logistics will pay 50% (USD 2,400) when the agreement is signed and the remaining USD 2,400 after final delivery. Hosting costs of USD 60 per month are paid separately by Nile Logistics.
+
+Sarah Ahmed is the project manager for Nile Logistics. James Carter leads the work for Brightline Software. Both sides must confirm the final feature list by March 20, 2026.
+
+The team was very happy with the first workshop. However, the client is worried that the delivery date is too tight.

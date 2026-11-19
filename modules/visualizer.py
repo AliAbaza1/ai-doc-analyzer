@@ -1,33 +1,24 @@
-import plotly.express as px
-import pandas as pd
+"""Plotly charts for the Streamlit app."""
 
-def plot_entity_distribution(entities):
-    """
-    يرسم توزيع الكيانات المسماة المستخرجة من النص.
-    
-    :param entities: قائمة من الكيانات [{'entity': 'Apple', 'label': 'ORG'}, ...]
-    """
+from __future__ import annotations
+
+import pandas as pd
+import plotly.express as px
+
+
+def plot_entity_distribution(entities: list[dict]):
     if not entities:
         return None
+    counts = pd.DataFrame(entities)["label"].value_counts().rename_axis("label").reset_index(name="count")
+    return px.bar(counts, x="label", y="count", labels={"label": "Entity type", "count": "Count"},
+                  title="Named entities by type")
 
-    df = pd.DataFrame(entities)
-    fig = px.bar(df['label'].value_counts().reset_index(),
-                 x='index', y='label',
-                 labels={'index': 'Entity Label', 'label': 'Count'},
-                 title='Named Entity Distribution')
-    return fig
 
-def plot_sentiment_timeline(sentiments):
-    """
-    يرسم تغير المشاعر مع مرور الوقت.
-    
-    :param sentiments: قائمة من القيم {'sentence': str, 'polarity': float, 'index': int}
-    """
-    if not sentiments:
+def plot_sentiment_timeline(rows: list[dict]):
+    if not rows:
         return None
-
-    df = pd.DataFrame(sentiments)
-    fig = px.line(df, x='index', y='polarity', markers=True,
-                  labels={'index': 'Sentence Number', 'polarity': 'Sentiment Polarity'},
-                  title='Sentiment Timeline')
+    fig = px.line(pd.DataFrame(rows), x="index", y="polarity", markers=True, hover_data=["sentence"],
+                  labels={"index": "Sentence", "polarity": "Sentiment (−1 negative … +1 positive)"},
+                  title="Sentiment through the document")
+    fig.add_hline(y=0, line_dash="dot")
     return fig
